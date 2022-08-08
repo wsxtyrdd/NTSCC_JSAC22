@@ -188,16 +188,11 @@ class MS_SSIM(torch.jit.ScriptModule):
 
 
 class MSE(torch.nn.Module):
-    def __init__(self, normalization=True):
+    def __init__(self):
         super(MSE, self).__init__()
         self.squared_difference = torch.nn.MSELoss(reduction='none')
-        self.normalization = normalization
 
     def forward(self, X, Y):
-        # [-1 1] to [0 1]
-        if self.normalization:
-            X = (X + 1) / 2
-            Y = (Y + 1) / 2
         return torch.mean(self.squared_difference(X * 255., Y * 255.))  # / 255.
 
 
@@ -205,7 +200,7 @@ class Distortion(torch.nn.Module):
     def __init__(self, config):
         super(Distortion, self).__init__()
         if config.distortion_metric == 'MSE':
-            self.dist = MSE(normalization=False)
+            self.dist = MSE()
         elif config.distortion_metric == 'SSIM':
             self.dist = SSIM()
         elif config.distortion_metric == 'MS-SSIM':
@@ -214,7 +209,7 @@ class Distortion(torch.nn.Module):
             config.logger.info("Unknown distortion type!")
             raise ValueError
 
-    def forward(self, X, Y, normalization=False):
+    def forward(self, X, Y):
         return self.dist.forward(X, Y).mean()  # / 255.
 
 
