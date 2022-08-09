@@ -6,7 +6,18 @@ Arxiv Link: https://arxiv.org/abs/2112.10961
 
 Project Page: https://semcomm.github.io/ntscc/
 
-## Evaluation
+## Usage
+
+## Pretrained Models
+
+Pretrained models (optimized for MSE) trained from scratch using randomly chose 300k images from the OpenImages dataset.
+
+Other pretrained models will be released successively.
+
+Note: We reorganize code and the performances are slightly different from the paper's.
+
+### RD curves
+
 
 ## Citation
 If you find the code helpful in your resarch or work, please cite:

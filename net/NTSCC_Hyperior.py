@@ -48,7 +48,7 @@ class NTC_Hyperprior(nn.Module):
             self.H = H
             self.W = W
 
-    def forward(self, input_image):
+    def forward(self, input_image, require_probs=False):
         B, C, H, W = input_image.shape
         self.update_resolution(H, W)
         y = self.ga(input_image)
@@ -66,7 +66,10 @@ class NTC_Hyperprior(nn.Module):
         mse_loss = self.distortion(input_image, x_hat)
         bpp_y = torch.log(y_likelihoods).sum() / (-math.log(2) * H * W) / B
         bpp_z = torch.log(z_likelihoods).sum() / (-math.log(2) * H * W) / B
-        return mse_loss, bpp_y, bpp_z, x_hat
+        if require_probs:
+            return mse_loss, bpp_y, bpp_z, x_hat, y, y_likelihoods, scales_hat, means_hat
+        else:
+            return mse_loss, bpp_y, bpp_z, x_hat
 
     def aux_loss(self):
         """Return the aggregated loss over the auxiliary entropy bottleneck
@@ -86,7 +89,6 @@ class NTSCC_Hyperprior(NTC_Hyperprior):
         self.fe = JSCCEncoder(**config.fe_kwargs)
         self.fd = JSCCDecoder(**config.fd_kwargs)
         if config.use_side_info:
-            # hyperprior-aided decoder refinement
             embed_dim = config.fe_kwargs['embed_dim']
             self.hyprior_refinement = Mlp(embed_dim * 3, embed_dim * 6, embed_dim)
         self.eta = config.eta
@@ -95,13 +97,12 @@ class NTSCC_Hyperprior(NTC_Hyperprior):
         sigma = sigma.clamp(1e-10, 1e10) if sigma.dtype == torch.float32 else sigma.clamp(1e-10, 1e4)
         gaussian = torch.distributions.normal.Normal(mean, sigma)
         prob = gaussian.cdf(feature + 0.5) - gaussian.cdf(feature - 0.5)
-        likelihoods = torch.clamp(prob, 1e-10, 1e10)  # BCHW
-        # likelihoods = -1.0 * torch.log(probs) / math.log(2.0)
+        likelihoods = torch.clamp(prob, 1e-10, 1e10)  # B C H W
         entropy = torch.clamp_min(-torch.log(likelihoods) / math.log(2), 0)  # B H W
         return likelihoods, entropy
 
-    def forward(self, input_image):
-        B, C, H, W = input_image.shape
+    def update_resolution(self, H, W):
+        # Update attention mask for W-MSA and SW-MSA
         if H != self.H or W != self.W:
             self.ga.update_resolution(H, W)
             self.fe.update_resolution(H // 16, W // 16)
@@ -110,84 +111,43 @@ class NTSCC_Hyperprior(NTC_Hyperprior):
             self.H = H
             self.W = W
 
-        # forward NTC
-        y = self.ga(input_image)
-        z = self.ha(y)
-        _, z_likelihoods = self.entropy_bottleneck(z)
-        z_offset = self.entropy_bottleneck._get_medians()
-        z_tmp = z - z_offset
-        z_hat = ste_round(z_tmp) + z_offset
+    def forward(self, input_image, **kwargs):
+        B, C, H, W = input_image.shape
+        num_pixels = H * W * 3
+        self.update_resolution(H, W)
 
-        gaussian_params = self.hs(z_hat)
-        scales_hat, means_hat = gaussian_params.chunk(2, 1)
-        y_hat = ste_round(y - means_hat) + means_hat
-        y_likelihoods, hy = self.feature_probs_based_Gaussian(y, means_hat, scales_hat)
-        hy = torch.clamp_min(-torch.log(y_likelihoods) / math.log(2), 0)
-        x_hat_ntc = self.gs(y_hat)
-        mse_loss_ntc = self.distortion(input_image, x_hat_ntc)
-        bpp_y = torch.log(y_likelihoods).sum() / (-math.log(2) * H * W) / B
-        bpp_z = torch.log(z_likelihoods).sum() / (-math.log(2) * H * W) / B
+        # NTC forward
+        mse_loss_ntc, bpp_y, bpp_z, x_hat_ntc, y, y_likelihoods, scales_hat, means_hat = \
+            self.forward_NTC(input_image, require_probs=True)
 
-        # forward NTSCC
-        s_masked, mask_BCHW, indexes = self.fe(y, y_likelihoods.detach(), hy, eta=self.eta)
-        avg_pwr = torch.sum(s_masked ** 2) / mask_BCHW.sum()
-        s_hat = self.channel.forward(s_masked, avg_pwr) * mask_BCHW
-        # indexes
+        # DJSCC forward
+        s_masked, mask_BCHW, indexes = self.fe(y, y_likelihoods.detach(), eta=self.eta)
+
+        # Pass through the channel.
+        mask_BCHW = mask_BCHW.byte()
+        channel_input = torch.masked_select(s_masked, mask_BCHW)
+        channel_output, channel_usage = self.channel.forward(channel_input)
+        s_hat = torch.zeros_like(s_masked)
+        s_hat[mask_BCHW] = channel_output
+        cbr_y = channel_usage / num_pixels
+
+        # Another realization of channel.
+        # avg_pwr = torch.sum(s_masked ** 2) / mask_BCHW.sum()
+        # s_hat, _ = self.channel.forward(s_masked, avg_pwr)
+        # s_hat = s_hat * mask_BCHW
+        # cbr_y = mask_BCHW.sum() / (B * num_pixels * 2)
+
+
         y_hat = self.fd(s_hat, indexes)
-
+        # hyperprior-aided decoder refinement (optional)
         if self.config.use_side_info:
             y_combine = torch.cat([BCHW2BLN(y_hat), BCHW2BLN(means_hat), BCHW2BLN(scales_hat)], dim=-1)
             y_hat = BLN2BCHW(BCHW2BLN(y_hat) + self.hyprior_refinement(y_combine), H // 16, W // 16)
 
         x_hat_ntscc = self.gs(y_hat).clip(0, 1)
         mse_loss_ntscc = self.distortion(input_image, x_hat_ntscc)
-        cbr_y = mask_BCHW.sum() / (B * H * W * 3 * 2)
+
         return mse_loss_ntc, bpp_y, bpp_z, mse_loss_ntscc, cbr_y, x_hat_ntc, x_hat_ntscc
 
-    def forward_NTC(self, input_image):
-        return super(NTSCC_Hyperprior, self).forward_NTC(input_image)
-
-    def forward_NTSCC(self, input_image):
-        B, C, H, W = input_image.shape
-        if H != self.H or W != self.W:
-            self.ga.update_resolution(H, W)
-            self.fe.update_resolution(H // 16, W // 16)
-            self.gs.update_resolution(H // 16, W // 16)
-            self.fd.update_resolution(H // 16, W // 16)
-            self.H = H
-            self.W = W
-
-        # forward NTC
-        y = self.ga(input_image)
-        z = self.ha(y)
-        _, z_likelihoods = self.entropy_bottleneck(z)
-        z_offset = self.entropy_bottleneck._get_medians()
-        z_tmp = z - z_offset
-        z_hat = ste_round(z_tmp) + z_offset
-        bpp_z = torch.log(z_likelihoods).sum() / (-math.log(2) * H * W) / B
-
-        gaussian_params = self.hs(z_hat)
-        scales_hat, means_hat = gaussian_params.chunk(2, 1)
-        y_likelihoods, hy = self.feature_probs_based_Gaussian(y, means_hat, scales_hat)
-        hy = torch.clamp_min(-torch.log(y_likelihoods) / math.log(2), 0)
-        s_masked, mask_BCHW, indexes = self.fe(y, y_likelihoods.detach(), hy, eta=self.eta)
-        avg_pwr = torch.sum(s_masked ** 2) / mask_BCHW.sum()
-        s_hat = self.channel.forward(s_masked, avg_pwr) * mask_BCHW
-        y_hat = self.fd(s_hat, indexes, eta=self.eta)
-
-        if self.config.use_side_info:
-            y_combine = torch.cat([BCHW2BLN(y_hat), BCHW2BLN(means_hat), BCHW2BLN(scales_hat)], dim=-1)
-            y_hat = BLN2BCHW(BCHW2BLN(y_hat) + self.hyprior_refinement(y_combine), H // 16, W // 16)
-
-        x_hat_ntscc = self.gs(y_hat).clip(0, 1)
-        mse_loss_ntscc = self.distortion(input_image, x_hat_ntscc)
-        cbr_y = mask_BCHW.sum() / (B * H * W * 3 * 2)
-        return mse_loss_ntscc, cbr_y, bpp_z, x_hat_ntscc
-
-    def update_resolution(self, H, W):
-        self.ga.update_resolution(H, W)
-        self.fe.update_resolution(H // 16, W // 16)
-        self.gs.update_resolution(H // 16, W // 16)
-        self.fd.update_resolution(H // 16, W // 16)
-        self.H = H
-        self.W = W
+    def forward_NTC(self, input_image, **kwargs):
+        return super(NTSCC_Hyperprior, self).forward(input_image, **kwargs)

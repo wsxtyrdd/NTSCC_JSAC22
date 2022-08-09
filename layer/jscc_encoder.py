@@ -37,7 +37,7 @@ class RateAdaptionEncoder(nn.Module):
         x_BLC_masked = (torch.matmul(x_BLC.unsqueeze(2), w).squeeze() + b) * mask
         x_masked = x_BLC_masked.reshape(B, H, W, -1).permute(0, 3, 1, 2)
         mask_BCHW = mask.reshape(B, H, W, -1).permute(0, 3, 1, 2)
-        return x_masked, mask_BCHW, indexes
+        return x_masked, mask_BCHW
 
     def update_resolution(self, H, W, device):
         self.H = H
@@ -70,8 +70,23 @@ class JSCCEncoder(nn.Module):
         self.refine = Mlp(embed_dim * 2, embed_dim * 8, embed_dim)
         self.norm = norm_layer(embed_dim)
 
-    def forward(self, x, px, hx, eta):
+    def forward(self, x, px, eta):
+        """
+        JSCCEncoder encodes latent representations to variable length channel-input vector.
+
+        Arguments:
+        x: Latent representation (patch embeddings), shape of BxCxHxW, also viewed as Bx(HxW)xC.
+        px: Estimated probability of x, shape of BxCxHxW, also viewed as Bx(HxW)xC.
+        eta: Scaling factor from entropy to channel bandwidth cost.
+
+        Returns:
+        s_masked: Channel-input vector.
+        indexes: The length of each patch embedding, shape of BxHxW.
+        mask: Binary mask, shape of BxCxHxW.
+        """
+
         B, C, H, W = x.size()
+        hx = torch.clamp_min(-torch.log(px) / math.log(2), 0)
         symbol_num = torch.sum(hx, dim=1).flatten(0) * eta
         x_BLC = x.flatten(2).permute(0, 2, 1)
         px_BLC = px.flatten(2).permute(0, 2, 1)
@@ -84,8 +99,8 @@ class JSCCEncoder(nn.Module):
             x_BLC = layer(x_BLC.contiguous())
         x_BLC = self.norm(x_BLC)
         x_BCHW = x_BLC.reshape(B, H, W, C).permute(0, 3, 1, 2)
-        x_masked, mask, indexes = self.rate_adaption(x_BCHW, indexes)
-        return x_masked, mask, indexes
+        s_masked, mask = self.rate_adaption(x_BCHW, indexes)
+        return s_masked, mask, indexes
 
     def update_resolution(self, H, W):
         self.input_resolution = (H, W)

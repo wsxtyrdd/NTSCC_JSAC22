@@ -1,6 +1,6 @@
 import torch
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 from net.NTSCC_Hyperior import NTSCC_Hyperprior
 import torch.optim as optim
 from utils import *
@@ -45,14 +45,11 @@ def train_one_epoch():
         losses.update(loss.item())
         bppys.update(bpp_y.item())
         bppzs.update(bpp_z.item())
-        if mse_loss_ntc.item() > 0:
-            psnr_jscc = 10 * (torch.log(255. * 255. / mse_loss_ntscc) / np.log(10))
-            psnr_jsccs.update(psnr_jscc.item())
-            psnr = 10 * (torch.log(255. * 255. / mse_loss_ntc) / np.log(10))
-            psnrs.update(psnr.item())
-        else:
-            psnrs.update(100)
-            psnr_jsccs.update(100)
+
+        psnr_jscc = 10 * (torch.log(255. * 255. / mse_loss_ntscc) / np.log(10))
+        psnr_jsccs.update(psnr_jscc.item())
+        psnr = 10 * (torch.log(255. * 255. / mse_loss_ntc) / np.log(10))
+        psnrs.update(psnr.item())
 
         if (global_step % config.print_step) == 0:
             process = (global_step % train_loader.__len__()) / (train_loader.__len__()) * 100.0
@@ -60,9 +57,9 @@ def train_one_epoch():
                 f'Step [{global_step % train_loader.__len__()}/{train_loader.__len__()}={process:.2f}%]',
                 f'Loss {losses.val:.3f} ({losses.avg:.3f})',
                 f'Time {elapsed.avg:.2f}',
-                f'PSNR1 {psnr_jsccs.val:.2f} ({psnr_jsccs.avg:.2f})',
+                f'PSNR_JSCC {psnr_jsccs.val:.2f} ({psnr_jsccs.avg:.2f})',
                 f'CBR {cbrs.val:.4f} ({cbrs.avg:.4f})',
-                f'PSNR2 {psnrs.val:.2f} ({psnrs.avg:.2f})',
+                f'PSNR_NTC {psnrs.val:.2f} ({psnrs.avg:.2f})',
                 f'Bpp_y {bppys.val:.2f} ({bppys.avg:.2f})',
                 f'Bpp_z {bppzs.val:.4f} ({bppzs.avg:.4f})',
                 f'Epoch {epoch}',
@@ -83,7 +80,6 @@ def test():
             start_time = time.time()
             input_image = input_image.cuda()
             mse_loss_ntc, bpp_y, bpp_z, mse_loss_ntscc, cbr_y, x_hat_ntc, x_hat_ntscc = net(input_image)
-            # mse_loss_ntc, bpp_y, bpp_z, x_hat_ntc = net.forward_NTC(input_image)
             if config.use_side_info:
                 cbr_z = bpp_snr_to_kdivn(bpp_z, 10)
                 ntc_loss = mse_loss_ntc + config.train_lambda * (bpp_y + bpp_z)
@@ -114,31 +110,13 @@ def test():
             ]))
             logger.info(log)
             PSNR_list.append(psnr_jscc)
-            CBR_list.append(cbr_y.item())
-            # channel bandwidth cost of side info \bar{k}
-            # 4 / (16*16*3) / 2.667 = 0.001953125
-            # filename = "/media/Dataset/video_test/VSD_4K/city/city_45s_1/NTSCC_480p/{}_cbr={:.4f}_psnr={:.2f}.png".format((batch_idx+1).__str__().zfill(5),
-            #                                                                                                       cbrs.val.item() + 0.001953125,
-            #                                                                                                       psnrs.val)
-            # torchvision.utils.save_image(x_hat_ntscc[0], filename)
+            CBR_list.append(cbr_y)
 
-    logger.info(f'Finish test! Average PSNR={psnr_jsccs.avg:.4f}dB, CBR={cbrs.avg + 0.001953125:.4f}')
-
-
-def test_image(net, input_image):
-    with torch.no_grad():
-        net.eval()
-        input_image = input_image.cuda()
-        # mse_loss_ntc, bpp_y, bpp_z, mse_loss_ntscc, cbr_y, x_hat_ntc, x_hat_ntscc = net(input_image)
-        y = net.ga(input_image)
-        mse_loss_ntscc, cbr_y, bpp_z, x_hat_ntscc = net.forward_NTSCC(input_image, y)
-        if config.use_side_info:
-            cbr_z = bpp_snr_to_kdivn(bpp_z, 10)
-            cbr = cbr_y + cbr_z
-        else:
-            cbr = cbr_y
-        psnr_jscc = CalcuPSNR_int(input_image, x_hat_ntscc).mean()
-    logger.info(f'Finish test! Average PSNR={psnr_jscc:.4f}dB, CBR={cbr + 0.001953125:.4f}')
+    # Here, the channel bandwidth cost of side info \bar{k} is transmitted by a capacity-achieving channel code. Note
+    # that, the side info should be transmitted through entropy coding and channel coding, which will be addressed in
+    # future releases.
+    cbr_sideinfo = np.log2(config.multiple_rate.__len__()) / (16*16*3) / np.log2(1 + 10 ** (net.channel.chan_param / 10))
+    logger.info(f'Finish test! Average PSNR={psnr_jsccs.avg:.4f}dB, CBR={cbrs.avg + cbr_sideinfo:.4f}')
 
 
 if __name__ == '__main__':
