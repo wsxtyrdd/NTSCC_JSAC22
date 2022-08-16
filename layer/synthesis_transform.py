@@ -5,8 +5,7 @@ class BasicLayer(nn.Module):
 
     def __init__(self, dim, out_dim, input_resolution, depth, num_heads, window_size,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., norm_layer=nn.LayerNorm, upsample=None,
-                 SNR_choice=None, rate_choice=None, eta_choice=None):
+                 drop_path=0., norm_layer=nn.LayerNorm, upsample=None):
 
         super().__init__()
         self.dim = dim
@@ -62,13 +61,11 @@ class BasicLayer(nn.Module):
 class SynthesisTransform(nn.Module):
     def __init__(self, img_size,
                  embed_dims=[96, 192, 384, 768], depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
-                 window_size=4, mlp_ratio=4., norm_layer=nn.LayerNorm, patch_norm=True,
-                 use_adaptive_token=False, SNR_choice=None, eta_choice=None):
+                 window_size=4, mlp_ratio=4., norm_layer=nn.LayerNorm, patch_norm=True):
         super().__init__()
         self.num_layers = len(embed_dims)
         self.patch_norm = patch_norm
         self.mlp_ratio = mlp_ratio
-        self.eta_choice = eta_choice
         self.H = img_size[0]
         self.W = img_size[1]
         self.patches_resolution = (img_size[0] // 2 ** len(depths), img_size[1] // 2 ** len(depths))
@@ -85,9 +82,7 @@ class SynthesisTransform(nn.Module):
                                window_size=window_size,
                                mlp_ratio=self.mlp_ratio,
                                norm_layer=norm_layer,
-                               upsample=PatchReverseMerging,
-                               SNR_choice=SNR_choice,
-                               eta_choice=eta_choice)
+                               upsample=PatchReverseMerging)
             self.layers.append(layer)
             print("Decoder ", layer.extra_repr())
         self.outconv = nn.Conv2d(embed_dims[-1], 3, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))

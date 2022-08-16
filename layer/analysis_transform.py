@@ -7,15 +7,11 @@ import torch
 class BasicLayer(nn.Module):
     def __init__(self, dim, out_dim, input_resolution, depth, num_heads, window_size,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., norm_layer=nn.LayerNorm, downsample=None,
-                 SNR_choice=None, eta_choice=None):
+                 drop_path=0., norm_layer=nn.LayerNorm, downsample=None):
 
         super().__init__()
         self.dim = dim
-        if downsample is not None:
-            self.input_resolution = (input_resolution[0] // 2, input_resolution[1] // 2)
-        else:
-            self.input_resolution = input_resolution
+        self.input_resolution = input_resolution
         self.depth = depth
         self.blocks = nn.ModuleList([
             SwinTransformerBlock(dim=out_dim, input_resolution=self.input_resolution,
@@ -66,15 +62,12 @@ class AnalysisTransform(nn.Module):
     def __init__(self, img_size=(256, 256),
                  embed_dims=[96, 192, 384, 768], depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
                  window_size=4, mlp_ratio=4., qkv_bias=True, qk_scale=None,
-                 norm_layer=nn.LayerNorm, patch_norm=True,
-                 use_adaptive_token=False, SNR_choice=None, eta_choice=None):
+                 norm_layer=nn.LayerNorm, patch_norm=True):
         super().__init__()
         self.num_layers = len(embed_dims)
-        self.use_adaptive_token = use_adaptive_token
         self.patch_norm = patch_norm
         self.num_features = embed_dims[-1]
         self.mlp_ratio = mlp_ratio
-        self.eta_choice = eta_choice
         self.patches_resolution = img_size
         self.H = img_size[0] // (2 ** self.num_layers)
         self.W = img_size[1] // (2 ** self.num_layers)
@@ -83,7 +76,7 @@ class AnalysisTransform(nn.Module):
         # build layers
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
-            layer = BasicLayer(dim=int(embed_dims[i_layer - 1]) if i_layer != 0 else 3,
+            layer = BasicLayer(dim=int(embed_dims[i_layer - 1]) if i_layer != 0 else embed_dims[0],
                                out_dim=int(embed_dims[i_layer]),
                                input_resolution=(self.patches_resolution[0] // (2 ** i_layer),
                                                  self.patches_resolution[1] // (2 ** i_layer)),
@@ -93,21 +86,16 @@ class AnalysisTransform(nn.Module):
                                mlp_ratio=self.mlp_ratio,
                                qkv_bias=qkv_bias, qk_scale=qk_scale,
                                norm_layer=norm_layer,
-                               downsample=PatchMerging if i_layer != 0 else None,
-                               SNR_choice=SNR_choice,
-                               eta_choice=eta_choice)
+                               downsample=PatchMerging if i_layer != 0 else None)
             print("Encoder ", layer.extra_repr())
             self.layers.append(layer)
         self.norm = norm_layer(embed_dims[-1])
         self.apply(self._init_weights)
 
-    def forward(self, x, SNR=None, eta=None):
+    def forward(self, x):
         x = self.patch_embed(x)  # BLN
         for i_layer, layer in enumerate(self.layers):
-            if self.use_adaptive_token:
-                x = layer(x, SNR, eta)
-            else:
-                x = layer(x)
+            x = layer(x)
         x = self.norm(x)
         B, L, N = x.shape
         x = x.reshape(B, self.H, self.W, N).permute(0, 3, 1, 2)

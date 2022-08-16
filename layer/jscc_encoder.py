@@ -32,11 +32,12 @@ class RateAdaptionEncoder(nn.Module):
         b = torch.index_select(self.bias, 0, indexes).reshape(B, H * W, -1)
         mask = self.mask.repeat(B, 1, 1)
         rate_constraint = self.rate_choice_tensor[indexes].reshape(B, H * W, 1).repeat(1, 1, max(self.rate_choice))
-        mask[mask < rate_constraint] = 1
-        mask[mask >= rate_constraint] = 0
-        x_BLC_masked = (torch.matmul(x_BLC.unsqueeze(2), w).squeeze() + b) * mask
+        mask_new = torch.zeros_like(mask)
+        mask_new[mask < rate_constraint] = 1
+        mask_new[mask >= rate_constraint] = 0
+        x_BLC_masked = (torch.matmul(x_BLC.unsqueeze(2), w).squeeze() + b) * mask_new
         x_masked = x_BLC_masked.reshape(B, H, W, -1).permute(0, 3, 1, 2)
-        mask_BCHW = mask.reshape(B, H, W, -1).permute(0, 3, 1, 2)
+        mask_BCHW = mask_new.reshape(B, H, W, -1).permute(0, 3, 1, 2)
         return x_masked, mask_BCHW
 
     def update_resolution(self, H, W, device):
