@@ -5,7 +5,6 @@ from torchvision import transforms
 from torch.utils.data.dataset import Dataset
 from PIL import Image
 import torch
-NUM_DATASET_WORKERS = 8
 
 
 class Datasets(Dataset):
@@ -47,7 +46,7 @@ def get_loader(config):
         np.random.seed(seed)
 
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                               num_workers=NUM_DATASET_WORKERS,
+                                               num_workers=config.num_workers,
                                                pin_memory=True,
                                                batch_size=config.batch_size,
                                                worker_init_fn=worker_init_fn_seed,

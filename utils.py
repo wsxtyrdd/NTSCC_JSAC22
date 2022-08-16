@@ -5,15 +5,18 @@ import os
 import logging
 
 
-def logger_configuration(config, save_log=False, test_mode=False):
-    # 配置 logger
-    logger = logging.getLogger("Deep joint source channel coder")
-    if test_mode:
-        config.workdir += '_test'
-    if save_log:
-        makedirs(config.workdir)
-        makedirs(config.samples)
-        makedirs(config.models)
+def logger_configuration(filename, phase, save_log=True):
+    logger = logging.getLogger("Nonlinear Transform Source-Channel Coding")
+    workdir = './history/{}'.format(filename)
+    if phase == 'test':
+        workdir += '_test'
+    log = workdir + '/Log_{}.log'.format(filename)
+    samples = workdir + '/samples'
+    models = workdir + '/models'
+    makedirs(workdir)
+    makedirs(samples)
+    makedirs(models)
+
     formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
                                   "%Y-%m-%d %H:%M:%S")
     stdhandler = logging.StreamHandler()
@@ -21,13 +24,12 @@ def logger_configuration(config, save_log=False, test_mode=False):
     stdhandler.setFormatter(formatter)
     logger.addHandler(stdhandler)
     if save_log:
-        filehandler = logging.FileHandler(config.log)
+        filehandler = logging.FileHandler(log)
         filehandler.setLevel(logging.INFO)
         filehandler.setFormatter(formatter)
         logger.addHandler(filehandler)
     logger.setLevel(logging.INFO)
-    config.logger = logger
-    return config.logger
+    return workdir, logger
 
 
 def single_plot(epoch, global_step, real, gen, config):

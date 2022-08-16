@@ -6,18 +6,38 @@ Arxiv Link: https://arxiv.org/abs/2112.10961
 
 Project Page: https://semcomm.github.io/ntscc/
 
+## Prerequisites
+* Python 3.8 and [Conda](https://www.anaconda.com/)
+* CUDA 11.0
+* Environment
+    ```
+    conda create -n $YOUR_PY38_ENV_NAME python=3.8
+    conda activate $YOUR_PY38_ENV_NAME
+    
+    pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
+    python -m pip install -r requirements.txt
+    ```
+  
 ## Usage
+
+
+Example of test the PSNR model:
+```bash
+python main.py --phase test
+```
 
 ## Pretrained Models
 
-Pretrained models (optimized for MSE) trained from scratch using randomly chose 300k images from the OpenImages dataset.
+Pretrained models (optimized for MSE) trained from scratch using randomly chose 500k images from the OpenImages dataset.
+
+* Download [NTSCC w/o z models](https://drive.google.com/drive/folders/1qNRu_08-O5-lkqo3Sht48FCLITqqK6t-?usp=sharing) and put them into ./checkpoints folder.
 
 Other pretrained models will be released successively.
 
 Note: We reorganize code and the performances are slightly different from the paper's.
 
-### RD curves
-
+>  RD curves on [Kodak](http://r0k.us/graphics/kodak/), under AWGN channel SNR=10dB.
+![kodak_rd](fig/kodak_results_bandwidth/kodak_psnr_cbr_10dB.png)
 
 ## Citation
 If you find the code helpful in your resarch or work, please cite:

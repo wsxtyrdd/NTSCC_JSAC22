@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="188_root" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+  <component name="PublishConfigData" autoUpload="Always" serverName="188_workdir" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
     <serverData>
       <paths name="114_root">
         <serverdata>
@@ -48,6 +48,13 @@
         <serverdata>
           <mappings>
             <mapping deploy="/" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="188_workdir">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/NTSCC_JSAC22" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

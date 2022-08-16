@@ -98,8 +98,7 @@ class NTSCC_Hyperprior(NTC_Hyperprior):
         gaussian = torch.distributions.normal.Normal(mean, sigma)
         prob = gaussian.cdf(feature + 0.5) - gaussian.cdf(feature - 0.5)
         likelihoods = torch.clamp(prob, 1e-10, 1e10)  # B C H W
-        entropy = torch.clamp_min(-torch.log(likelihoods) / math.log(2), 0)  # B H W
-        return likelihoods, entropy
+        return likelihoods
 
     def update_resolution(self, H, W):
         # Update attention mask for W-MSA and SW-MSA
@@ -119,6 +118,7 @@ class NTSCC_Hyperprior(NTC_Hyperprior):
         # NTC forward
         mse_loss_ntc, bpp_y, bpp_z, x_hat_ntc, y, y_likelihoods, scales_hat, means_hat = \
             self.forward_NTC(input_image, require_probs=True)
+        y_likelihoods = self.feature_probs_based_Gaussian(y, means_hat, scales_hat)
 
         # DJSCC forward
         s_masked, mask_BCHW, indexes = self.fe(y, y_likelihoods.detach(), eta=self.eta)

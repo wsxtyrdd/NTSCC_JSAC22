@@ -4,28 +4,21 @@ import torch.nn as nn
 
 
 class config:
-    seed = 1024
-    CUDA = True
-    device = torch.device("cuda:0")
-    base_path = '/media/Dataset/HR_Image_dataset'
-    checkpoint = '/media/D/wangsixian/NTSCC_JSAC/checkpoints/update_PSNR_SNR=10_gaussian/ntscc_hyperprior_quality_1_psnr.pth'
-    train_data_dir = [base_path + '/DIV2K_train_HR']
-    test_data_dir = ['/media/Dataset_/Dataset/kodak_test']
+
+    train_data_dir = ['path to Openimages dataset or DIV2K dataset']
+    test_data_dir = ['path to kodak dataset or CLIC21 testset']
+    batch_size = 10
+    num_workers = 8
+
     print_step = 50
     plot_step = 1000
-    filename = datetime.datetime.now().__str__()[:-7]
-    workdir = './history/{}'.format(filename)
-    log = workdir + '/Log_{}.log'.format(filename)
-    samples = workdir + '/samples'
-    models = workdir + '/models'
     logger = None
-
-    distortion_metric = 'MSE'
 
     # training details
     image_dims = (3, 256, 256)
     lr = 1e-4
-    batch_size = 10
+    aux_lr = 1e-3
+    distortion_metric = 'MSE'  # 'MS-SSIM'
 
     use_side_info = False
     train_lambda = 64
