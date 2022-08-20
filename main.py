@@ -7,7 +7,7 @@ import argparse
 from net.NTSCC_Hyperior import NTSCC_Hyperprior
 import torch.optim as optim
 from utils import *
-from data.datasets import get_loader
+from data.datasets import get_loader, get_test_loader
 from config import config
 
 
@@ -188,11 +188,13 @@ def main(argv):
     net = NTSCC_Hyperprior(config).cuda()
     model_path = args.checkpoint
     load_weights(net, model_path)
-    train_loader, test_loader = get_loader(config)
+
 
     if args.phase == 'test':
+        test_loader = get_test_loader(config)
         test(net, test_loader, logger)
     elif args.phase == 'train':
+        train_loader, test_loader = get_loader(config)
         global global_step
         G_params = set(p for n, p in net.named_parameters() if not n.endswith(".quantiles"))
         aux_params = set(p for n, p in net.named_parameters() if n.endswith(".quantiles"))

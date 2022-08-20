@@ -58,6 +58,14 @@ def get_loader(config):
 
     return train_loader, test_loader
 
+def get_test_loader(config):
+    test_dataset = Datasets(config)
+    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
+                                              batch_size=1,
+                                              shuffle=False)
+
+    return test_loader
+
 
 def get_test_loader(config):
     test_dataset = Datasets(config)
