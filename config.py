@@ -5,8 +5,8 @@ import torch.nn as nn
 
 class config:
 
-    train_data_dir = ['/media/Dataset/HR_Image_dataset/DIV2K_train_HR']
-    test_data_dir = ['/media/Dataset_/Dataset/kodak_test']
+    train_data_dir = ['path to DIV2K_train_HR or OpenImages']
+    test_data_dir = ['Path to kodak']
     batch_size = 10
     num_workers = 8
 
