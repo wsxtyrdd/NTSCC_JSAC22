@@ -23,7 +23,7 @@ Project Page: https://semcomm.github.io/ntscc/
 
 Example of test the PSNR model:
 ```bash
-python main.py --phase test
+python main.py --phase test --checkpoint path_to_checkpoint
 ```
 
 ## Pretrained Models
