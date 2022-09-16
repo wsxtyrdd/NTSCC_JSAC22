@@ -40,7 +40,7 @@ Note: We reorganize code and the performances are slightly different from the pa
 ![kodak_rd](fig/kodak_results_bandwidth/kodak_psnr_cbr_10dB.png)
 
 ## Citation
-If you find the code helpful in your resarch or work, please cite:
+If you find the code helpful in your research or work, please cite:
 ```
 @ARTICLE{9791398,
   author={Dai, Jincheng and Wang, Sixian and Tan, Kailin and Si, Zhongwei and Qin, Xiaoqi and Niu, Kai and Zhang, Ping},
